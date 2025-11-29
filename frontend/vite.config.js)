@@ -1,0 +1,11 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+// ✅ PRIMEXA Frontend Configuration
+export default defineConfig({
+  plugins: [react()],
+  base: "./", // ensures Firebase hosting works correctly
+  build: {
+    outDir: "dist",
+  },
+});

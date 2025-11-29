@@ -1,0 +1,15 @@
+{
+  "name": "fnodatadashboardstreamlite-backend",
+  "version": "1.0.0",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.py",
+  "scripts": {
+    "deploy": "firebase deploy --only functions:api"
+  },
+  "dependencies": {
+    "firebase-functions": "^5.1.1",
+    "firebase-admin": "^12.7.0"
+  }
+}
