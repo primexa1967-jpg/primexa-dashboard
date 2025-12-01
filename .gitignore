@@ -1,25 +1,13 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+﻿# Python virtual environments
+venv/
+backend/venv/
 
-node_modules
-dist
-dist-ssr
-*.local
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-backend/serviceAccountKey.json
+# Environment files
+.env
+
+# VS Code settings
+.vscode/
