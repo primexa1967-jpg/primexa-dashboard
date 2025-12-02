@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ✅ Active Users — role and plan controlled
+    match /activeUsers/{userId} {
+      allow read, write: if isSuperadmin(); // Full control
+      allow read, write: if isAdmin() && resource.data.role != 'superadmin';
+      allow read: if isApprovedAndActive(); // Paid & not expired users
+      allow write: if false;
+    }
+
+    // 🕓 Pending Users — awaiting approval
+    match /pendingUsers/{userId} {
+      allow read, write: if isSuperadmin() || isAdmin();
+      allow read: if request.auth != null && request.auth.token.email == resource.data.email;
+      allow write: if false;
+    }
+
+    // 💼 Plans — Superadmin-only
+    match /plans/{planId} {
+      allow read: if isSuperadmin() || isAdmin(); // Admin can see plans
+      allow write: if isSuperadmin(); // Only superadmin can modify
+    }
+
+    // 📊 Dashboard — Only approved, active users can read
+    match /dashboard/{docId} {
+      allow read: if isApprovedAndActive();
+      allow write: if isSuperadmin() || isAdmin();
+    }
+
+    // ❌ Blocked users
+    match /blockedList/{uid} {
+      allow read, write: if false;
+    }
+
+    // 🔹 Helper functions
+    function isSuperadmin() {
+      return request.auth != null &&
+             request.auth.token.email == "primexa1967@gmail.com";
+    }
+
+    function isAdmin() {
+      return request.auth != null &&
+             request.auth.token.email == "admin@primexa.com";
+    }
+
+    // ✅ Allow only users who are active, approved, and not expired
+    function isApprovedAndActive() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/activeUsers/$(request.auth.token.uid)) &&
+             get(/databases/$(database)/documents/activeUsers/$(request.auth.token.uid)).data.active == true &&
+             get(/databases/$(database)/documents/activeUsers/$(request.auth.token.uid)).data.expiryDate > request.time;
+    }
+  }
+}

@@ -1,13 +1,24 @@
-﻿# Python virtual environments
+# --- Python ---
 venv/
-backend/venv/
-
-# Byte-compiled / cache files
 __pycache__/
-*.py[cod]
+*.pyc
 
-# Environment files
+# --- Node / Firebase ---
+node_modules/
+.firebase/
+.firebase-tools/
+.cache/
+build/
+dist/
+
+# --- Environment / secrets ---
 .env
+serviceAccountKey.json
 
-# VS Code settings
+# --- System files ---
+.DS_Store
+Thumbs.db
+
+# --- IDE and temp ---
 .vscode/
+*.log
