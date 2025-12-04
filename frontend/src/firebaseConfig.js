@@ -9,16 +9,15 @@ import {
 
 /* -------------------------------
  🔹 Firebase Configuration
-   (Replace apiKey below with your NEW key
-   from Google Cloud → Credentials)
 -------------------------------- */
 const firebaseConfig = {
-  apiKey: "AIzaSyCC4w8c7krKwEDoOXnrpaat13BKhFjYyao", // 🔒 replace only this value
+  apiKey: "AIzaSyCC4w8c7krKwEDoOXnrpaat13BKhFjYyao",
   authDomain: "fnodatadashboardstreamlite.firebaseapp.com",
+  databaseURL: "https://fnodatadashboardstreamlite-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "fnodatadashboardstreamlite",
-  storageBucket: "fnodatadashboardstreamlite.appspot.com",
+  storageBucket: "fnodatadashboardstreamlite.firebasestorage.app",
   messagingSenderId: "877238528573",
-  appId: "1:877238528573:web:11cbab0974c2103fde1854",
+  appId: "1:877238528573:web:d8da5eef41372013de1854"
 };
 
 /* -------------------------------
@@ -47,10 +46,9 @@ setPersistence(auth, browserLocalPersistence)
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-// ✅ Redirect domain (production only)
 console.log("🌐 Firebase Auth running on fnodatadashboardstreamlite.web.app");
 
 /* -------------------------------
- 🔹 Exports
+ 🔹 Export everything for use elsewhere
 -------------------------------- */
 export { app, auth, provider };

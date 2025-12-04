@@ -1,41 +1,74 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
+// functions/approveUser.js
+// -----------------------------------------------------------------------------
+// ✅ Approve User (Moves user from pendingUsers → approvedUsers)
+// -----------------------------------------------------------------------------
 
-if (!admin.apps.length) admin.initializeApp();
+import { onRequest } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
+import admin from "./init.js";
+
 const db = admin.firestore();
 
-// Use uploaded file as fallback for payment proof
-const PAYMENT_PROOF_FALLBACK = "/mnt/data/de68c37b-b309-4a65-a1aa-f499a9f387b7.png";
+/**
+ * 🔹 approveUser()
+ * Moves a user from `pendingUsers` → `approvedUsers`
+ * - Sets plan, expiry, and approval metadata
+ * - Ensures idempotency (skips if already approved)
+ */
+export const approveUser = onRequest({ region: "asia-south1" }, async (req, res) => {
+  try {
+    const { uid, plan, approvedBy } = req.body;
 
-exports.approveUser = functions
-  .region("asia-southeast1")
-  .https.onRequest(async (req, res) => {
-    try {
-      const { uid } = req.body;
-      if (!uid) return res.json({ success: false, message: "Missing uid" });
-
-      const paidDoc = await db.collection("paidUsers").doc(uid).get();
-      if (!paidDoc.exists)
-        return res.json({ success: false, message: "User not found in paid list" });
-
-      const data = paidDoc.data();
-
-      // Ensure paymentProof exists
-      const paymentProof = data.paymentProof || PAYMENT_PROOF_FALLBACK;
-
-      // Move user to approvedUsers
-      await db.collection("approvedUsers").doc(uid).set({
-        ...data,
-        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        paymentProof,
+    if (!uid || !plan || !approvedBy) {
+      return res.status(400).json({
+        ok: false,
+        error: "MISSING_FIELDS",
+        message: "uid, plan, and approvedBy are required.",
       });
-
-      // Remove from paidUsers
-      await db.collection("paidUsers").doc(uid).delete();
-
-      res.json({ success: true, uid });
-    } catch (err) {
-      console.error("approveUser error:", err);
-      res.json({ success: false, message: err.message || "Unknown error" });
     }
-  });
+
+    logger.info(`⚙️ Approving user: ${uid}, Plan: ${plan}`);
+
+    // Check if user already approved
+    const approvedDoc = await db.collection("approvedUsers").doc(uid).get();
+    if (approvedDoc.exists) {
+      logger.warn(`ℹ️ User ${uid} is already in approvedUsers`);
+      return res.status(200).json({ ok: true, status: "ALREADY_APPROVED" });
+    }
+
+    // Fetch from pendingUsers
+    const pendingDoc = await db.collection("pendingUsers").doc(uid).get();
+    if (!pendingDoc.exists) {
+      logger.warn(`❌ No pending user found for UID: ${uid}`);
+      return res.status(404).json({ ok: false, error: "NOT_PENDING" });
+    }
+
+    const data = pendingDoc.data();
+
+    // Calculate expiry based on plan
+    const planDays =
+      plan === "plan90" ? 90 : plan === "plan180" ? 180 : plan === "plan365" ? 365 : 0;
+    const expiryDate = new Date(Date.now() + planDays * 86400000);
+
+    // Move to approvedUsers
+    await db.collection("approvedUsers").doc(uid).set({
+      ...data,
+      plan,
+      approvedBy,
+      approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiryDate,
+      status: "approved",
+    });
+
+    // Remove from pendingUsers
+    await db.collection("pendingUsers").doc(uid).delete();
+
+    logger.info(`✅ User ${uid} approved successfully under ${plan}`);
+    res.status(200).json({ ok: true, status: "APPROVED" });
+  } catch (err) {
+    logger.error("❌ approveUser error:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+export { approveUser };

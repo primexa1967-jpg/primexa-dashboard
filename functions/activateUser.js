@@ -1,34 +1,61 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
+// functions/activateUser.js
+// -----------------------------------------------------------------------------
+// ✅ Activate User (Moves user from approvedUsers → activeUsers)
+// -----------------------------------------------------------------------------
 
-if (!admin.apps.length) admin.initializeApp();
+import { onRequest } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
+import admin from "./init.js"; // ✅ Uses your shared init.js (Firestore + Auth)
 const db = admin.firestore();
 
-exports.activateUser = functions
-  .region("asia-southeast1")
-  .https.onRequest(async (req, res) => {
-    try {
-      const { uid } = req.body;
+/**
+ * 🔹 activateUser()
+ * Moves a user from `approvedUsers` → `activeUsers`
+ * - Adds activation timestamp
+ * - Removes from approved list
+ * - Ensures safety if user already active
+ */
+export const activateUser = onRequest({ region: "asia-south1" }, async (req, res) => {
+  try {
+    const { uid } = req.body;
 
-      if (!uid) return res.json({ success: false, message: "Missing uid" });
-
-      const approvedDoc = await db.collection("approvedUsers").doc(uid).get();
-      if (!approvedDoc.exists)
-        return res.json({ success: false, message: "User not approved" });
-
-      const data = approvedDoc.data();
-
-      await db.collection("activeUsers").doc(uid).set({
-        ...data,
-        activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      // Remove from approved list
-      await db.collection("approvedUsers").doc(uid).delete();
-
-      res.json({ success: true });
-    } catch (err) {
-      console.error("activateUser error:", err);
-      res.json({ success: false });
+    if (!uid) {
+      return res.status(400).json({ ok: false, error: "MISSING_UID" });
     }
-  });
+
+    logger.info(`⚙️ Activating user: ${uid}`);
+
+    // Check if already active
+    const activeDoc = await db.collection("activeUsers").doc(uid).get();
+    if (activeDoc.exists) {
+      logger.warn(`User ${uid} is already active`);
+      return res.status(200).json({ ok: true, status: "ALREADY_ACTIVE" });
+    }
+
+    // Fetch from approved list
+    const approvedDoc = await db.collection("approvedUsers").doc(uid).get();
+    if (!approvedDoc.exists) {
+      logger.warn(`❌ No approved user found for UID: ${uid}`);
+      return res.status(404).json({ ok: false, error: "NOT_APPROVED" });
+    }
+
+    const data = approvedDoc.data();
+
+    // Move to activeUsers
+    await db.collection("activeUsers").doc(uid).set({
+      ...data,
+      status: "active",
+      activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      activatedBy: data?.approvedBy || "system",
+    });
+
+    // Remove from approvedUsers
+    await db.collection("approvedUsers").doc(uid).delete();
+
+    logger.info(`✅ User ${uid} moved to activeUsers successfully`);
+    res.status(200).json({ ok: true, status: "ACTIVATED" });
+  } catch (err) {
+    logger.error("❌ activateUser error:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});

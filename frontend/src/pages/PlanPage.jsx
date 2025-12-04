@@ -1,109 +1,88 @@
+// frontend/src/pages/PlanPage.jsx
 import React, { useState } from "react";
-import axios from "axios";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { auth, app } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
-/* ---------- BACKEND FUNCTION ENDPOINT ---------- */
-const BASE = "https://generatefileasia-ji3e37go5a-el.a.run.app";
+const functions = getFunctions(app, "asia-south1");
+const sendEmailCode = httpsCallable(functions, "sendEmailCode");
 
 export default function PlanPage() {
-  const [selectedPlan, setSelectedPlan] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState("monthly");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
   const navigate = useNavigate();
 
-  // Dummy logged-in user data (to be passed via context or localStorage)
-  const userData = JSON.parse(localStorage.getItem("primexaUser")) || {};
-
-  /* ---------- HANDLE PLAN SELECTION ---------- */
-  const handlePlanSubmit = async () => {
-    if (!selectedPlan) {
-      setMessage("⚠️ Please select a plan before continuing.");
+  const handleSubmit = async () => {
+    if (!auth.currentUser) {
+      setStatus("Please login with Google first.");
       return;
     }
-
-    if (!userData.email) {
-      setMessage("⚠️ Missing user data. Please login again.");
-      navigate("/");
-      return;
-    }
-
-    setLoading(true);
-    setMessage("");
 
     try {
-      const res = await axios.post(`${BASE}/generateFileAsia`, {
-        email: userData.email,
-        name: userData.name,
-        uid: userData.uid,
-        deviceId: userData.deviceId,
+      setLoading(true);
+      setStatus("Processing payment and sending verification link...");
+
+      const res = await sendEmailCode({
+        email: auth.currentUser.email,
         plan: selectedPlan,
-        action: "register",
       });
 
-      if (res.status === 200) {
-        setMessage("✅ Registration submitted. Awaiting approval.");
-        // Redirect to “pending approval” or login page
-        setTimeout(() => navigate("/"), 3000);
+      if (res.data.ok) {
+        setStatus("✅ Email sent! Please check your inbox to verify registration.");
       } else {
-        setMessage("❌ Something went wrong. Try again later.");
+        setStatus("⚠️ Failed to send email. Try again later.");
       }
     } catch (err) {
-      console.error("Plan selection error:", err);
-      setMessage("❌ Error submitting registration.");
+      console.error("PlanPage Error:", err);
+      setStatus("❌ Error occurred. Please retry.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------- UI ---------- */
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-black to-gray-900 text-white p-6">
-      {/* Header */}
-      <h1 className="text-3xl md:text-4xl font-bold text-yellow-400 mb-8">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6">
+      <h1 className="text-2xl md:text-3xl font-bold text-yellow-400 mb-4">
         Choose Your Plan
       </h1>
 
-      {/* Plans */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 w-full max-w-3xl">
-        {[
-          { id: "plan90", label: "90 Days", days: 90, price: "₹999" },
-          { id: "plan180", label: "180 Days", days: 180, price: "₹1799" },
-          { id: "plan365", label: "365 Days", days: 365, price: "₹2999" },
-        ].map((p) => (
-          <div
-            key={p.id}
-            onClick={() => setSelectedPlan(p.label)}
-            className={`cursor-pointer border-2 rounded-xl p-6 text-center transition-all ${
-              selectedPlan === p.label
-                ? "border-yellow-400 bg-yellow-600/20"
-                : "border-yellow-800 hover:border-yellow-400"
-            }`}
-          >
-            <h2 className="text-2xl font-bold text-yellow-300">{p.label}</h2>
-            <p className="text-gray-300 mt-2">{p.price}</p>
-          </div>
-        ))}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <button
+          onClick={() => setSelectedPlan("monthly")}
+          className={`px-6 py-3 rounded-lg border ${
+            selectedPlan === "monthly"
+              ? "bg-yellow-500 text-black font-semibold"
+              : "border-yellow-500 text-yellow-400"
+          }`}
+        >
+          Monthly — ₹499
+        </button>
+        <button
+          onClick={() => setSelectedPlan("yearly")}
+          className={`px-6 py-3 rounded-lg border ${
+            selectedPlan === "yearly"
+              ? "bg-yellow-500 text-black font-semibold"
+              : "border-yellow-500 text-yellow-400"
+          }`}
+        >
+          Yearly — ₹4999
+        </button>
       </div>
 
-      {/* Submit Button */}
       <button
-        onClick={handlePlanSubmit}
+        onClick={handleSubmit}
         disabled={loading}
-        className="bg-yellow-500 text-black px-6 py-3 rounded-lg font-semibold hover:bg-yellow-400 transition-all"
+        className="bg-yellow-500 hover:bg-yellow-400 text-black font-semibold px-8 py-3 rounded-lg"
       >
-        {loading ? "Processing…" : "Proceed"}
+        {loading ? "Processing..." : "Proceed to Pay & Verify"}
       </button>
 
-      {/* Status Message */}
-      {message && <div className="mt-6 text-yellow-300">{message}</div>}
-
-      {/* Footer */}
-      <div className="absolute bottom-6 text-gray-400 text-sm text-center">
-        <p>⚠️ After payment, you will receive a registration code by email.</p>
-        <p className="text-yellow-400 mt-1">
-          Use that code in the registration page to activate your account.
-        </p>
-      </div>
+      {status && (
+        <div className="mt-4 text-center text-yellow-300 font-medium max-w-sm">
+          {status}
+        </div>
+      )}
     </div>
   );
 }

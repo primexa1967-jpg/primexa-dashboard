@@ -6,27 +6,33 @@ import {
   setPersistence,
   browserLocalPersistence,
 } from "firebase/auth";
-import { auth, provider } from "../firebaseConfig";
-import axios from "axios";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { auth, provider, app } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
-// 🌐 Backend Cloud Function endpoint
-const BASE = "https://generatefileasia-ji3e37go5a-el.a.run.app";
+/* -------------------------------------------------
+ 🔧 Connect to Cloud Function (Backend)
+-------------------------------------------------- */
+const functions = getFunctions(app, "asia-south1"); // ✅ Must match your deployed region
+const verifyUser = httpsCallable(functions, "login");
 
+console.log("🌐 Connected to Firebase Cloud Functions (asia-south1)");
+
+/* -------------------------------------------------
+ 🔐 Login Page Component
+-------------------------------------------------- */
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
   /* -------------------------------------------------
-   * 1️⃣ Set Firebase Auth Persistence (Session memory)
+   * 1️⃣ Set Firebase Auth Persistence
    * ------------------------------------------------- */
   useEffect(() => {
     setPersistence(auth, browserLocalPersistence)
-      .then(() =>
-        console.log("🔐 Firebase Auth persistence set successfully.")
-      )
-      .catch((err) => console.error("⚠️ Persistence error:", err));
+      .then(() => console.log("✅ Firebase Auth persistence set"))
+      .catch((err) => console.error("⚠️ Persistence setup failed:", err));
   }, []);
 
   /* -------------------------------------------------
@@ -34,11 +40,9 @@ export default function LoginPage() {
    * ------------------------------------------------- */
   const handleGoogleLogin = async () => {
     try {
-      console.log("🖱️ Sign-in button clicked");
       setLoading(true);
       setError("");
-
-      // Start Firebase redirect login
+      console.log("🟡 Starting Google Redirect Sign-in...");
       await signInWithRedirect(auth, provider);
       console.log("➡️ Redirect initiated...");
     } catch (err) {
@@ -54,42 +58,46 @@ export default function LoginPage() {
   useEffect(() => {
     const checkRedirect = async () => {
       try {
-        console.log("🔁 Checking redirect result...");
+        console.log("🔁 Checking Google redirect result...");
         const result = await getRedirectResult(auth);
 
         if (result?.user) {
-          const { email, displayName, uid } = result.user;
-          const deviceId = navigator.userAgent;
+          const { email, emailVerified } = result.user;
+          console.log(`✅ Firebase redirect success for ${email}`);
 
-          console.log(`✅ Firebase login success: ${email}`);
-
-          // 🔹 Notify backend (user tracking / registration)
-          try {
-            await axios.post(`${BASE}/generateFileAsia`, {
-              email,
-              name: displayName || "Anonymous User",
-              uid,
-              deviceId,
-            });
-            console.log("📡 Backend tracking successful.");
-          } catch (apiError) {
-            console.warn("⚠️ Backend tracking failed:", apiError.message);
+          if (!emailVerified) {
+            setError("Please verify your Google email before logging in.");
+            return;
           }
 
-          // 🔹 Role-based routing
-          if (email === "primexa1967@gmail.com") {
-            console.log("🔑 Redirecting to Admin Panel...");
-            navigate("/admin");
+          const deviceId = navigator.userAgent;
+          console.log("📱 Device ID:", deviceId);
+
+          // 🔹 Call backend to verify or register user
+          const response = await verifyUser({ email, deviceId });
+          const data = response.data;
+
+          console.log("🧩 Backend response:", data);
+
+          if (data.ok && data.status === "LOGIN_OK") {
+            console.log(`✅ User verified: ${data.role}`);
+
+            if (data.role === "superadmin" || data.role === "admin")
+              navigate("/admin");
+            else navigate("/dashboard");
+          } else if (data.status === "NEW_USER_REGISTERED") {
+            console.log("🎉 New user registered — redirecting to plan page");
+            navigate("/plan");
           } else {
-            console.log("📊 Redirecting to Dashboard...");
-            navigate("/dashboard");
+            console.warn("🚫 Authorization failed:", data.status);
+            setError("Authorization failed. Please contact admin.");
           }
         } else {
-          console.log("ℹ️ No redirect result — waiting for AuthStateChanged...");
+          console.log("ℹ️ No redirect result found. Waiting for AuthState...");
         }
       } catch (err) {
         console.error("⚠️ Redirect result error:", err);
-        setError("Login failed. Try again.");
+        setError("Login failed. Please retry.");
       } finally {
         setLoading(false);
       }
@@ -97,12 +105,10 @@ export default function LoginPage() {
 
     checkRedirect();
 
-    /* -------------------------------------------------
-     * 4️⃣ Fallback for already logged-in users
-     * ------------------------------------------------- */
+    // 4️⃣ Fallback: if already signed in
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log(`✅ Logged-in user detected: ${user.email}`);
+      if (user && user.emailVerified) {
+        console.log(`🔓 Active session detected for ${user.email}`);
         if (user.email === "primexa1967@gmail.com") navigate("/admin");
         else navigate("/dashboard");
       }
@@ -112,7 +118,7 @@ export default function LoginPage() {
   }, [navigate]);
 
   /* -------------------------------------------------
-   * 5️⃣ Page Title Setup
+   * 5️⃣ Page Title
    * ------------------------------------------------- */
   useEffect(() => {
     document.title = "PRIMEXA Option Buyer’s Dashboard Login";
@@ -150,15 +156,6 @@ export default function LoginPage() {
         >
           {loading ? "Connecting…" : "Sign in with Google"}
         </button>
-
-        <a
-          href="https://fnodatadashboardstreamlite.web.app"
-          target="_blank"
-          rel="noreferrer"
-          className="block w-full mt-4 bg-gradient-to-r from-yellow-600 to-yellow-400 text-black font-semibold py-3 rounded-lg hover:scale-105 transition-transform"
-        >
-          📲 Download PRIMEXA App
-        </a>
 
         {error && (
           <div className="text-red-500 mt-4 text-sm font-medium">{error}</div>

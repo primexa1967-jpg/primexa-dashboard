@@ -1,4 +1,4 @@
-// ✅ Firebase Initialization (Production Safe + Redirect Fixed)
+// ✅ Import Firebase SDK modules
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
@@ -7,40 +7,49 @@ import {
   browserLocalPersistence,
 } from "firebase/auth";
 
-/* ---------- FIREBASE CONFIG ---------- */
+/* -------------------------------------------------
+ 🔧 Firebase Project Configuration
+ (Replace apiKey with your actual key from Firebase Console → Project Settings → SDK setup)
+-------------------------------------------------- */
 const firebaseConfig = {
-  apiKey: "AIzaSyBzRwBSG8wmfyPgxnBJb25IRbtEADou3S0",
+  apiKey: "AIzaSyCC4w8c7krKwEDoOXnrpaat13BKhFjYyao", // 🔑 add from Firebase Console
   authDomain: "fnodatadashboardstreamlite.firebaseapp.com",
+  databaseURL:
+    "https://fnodatadashboardstreamlite-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "fnodatadashboardstreamlite",
-  storageBucket: "fnodatadashboardstreamlite.appspot.com",
+  storageBucket: "fnodatadashboardstreamlite.appspot.com", // ✅ corrected
   messagingSenderId: "877238528573",
-  appId: "1:877238528573:web:11cbab0974c2103fde1854",
+  appId: "1:877238528573:web:d8da5eef41372013de1854",
 };
 
-/* ---------- INITIALIZE ---------- */
+/* -------------------------------------------------
+ 🚀 Initialize Firebase App (Safe for Hot Reload)
+-------------------------------------------------- */
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+/* -------------------------------------------------
+ 🔐 Firebase Auth Setup
+-------------------------------------------------- */
 const auth = getAuth(app);
 
-/* ---------- AUTH PERSISTENCE ---------- */
+// ✅ Keep users signed in between sessions
 setPersistence(auth, browserLocalPersistence)
   .then(() => console.log("🔐 Firebase Auth persistence set"))
   .catch((err) => console.warn("⚠️ Persistence setup failed:", err.message));
 
 auth.useDeviceLanguage();
 
-/* ---------- GOOGLE PROVIDER ---------- */
+/* -------------------------------------------------
+ 🌐 Google Auth Provider Setup
+-------------------------------------------------- */
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({
   prompt: "select_account",
-  // ✅ Ensure correct client ID is used (from Google provider in Firebase)
   client_id:
     "877238528573-p5jucu5u9613gu583n6c6d19s2plp0d6.apps.googleusercontent.com",
 });
 
-/* ---------- REDIRECT DOMAIN FIX ---------- */
-if (window.location.hostname.includes("fnodatadashboardstreamlite")) {
-  console.log("🌐 Redirect URI set to hosted app domain");
-}
-
-/* ---------- EXPORTS ---------- */
+/* -------------------------------------------------
+ 📦 Exports
+-------------------------------------------------- */
 export { app, auth, provider };

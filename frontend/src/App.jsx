@@ -1,58 +1,83 @@
-import React, { Suspense, lazy } from "react";
-import { Routes, Route } from "react-router-dom";
-import LoginPage from "./pages/LoginPage";
+// frontend/src/App.jsx
+import React, { useEffect, useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase";
 
-// ✅ Lazy load heavy pages for performance
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const AdminPage = lazy(() => import("./pages/AdminPage"));
-const AdminPlans = lazy(() => import("./pages/admin/AdminPlans"));
-const PlanPage = lazy(() => import("./pages/PlanPage"));
-const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+// 🔹 Page Imports
+import LoginPage from "./pages/LoginPage";
+import PlanPage from "./pages/PlanPage";
+import VerifyPage from "./pages/VerifyPage";
+import Dashboard from "./pages/Dashboard";
+import AdminPage from "./pages/AdminPage";
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // 🟡 Watch Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-yellow-400">
+        Loading…
+      </div>
+    );
+  }
+
   return (
-    <Suspense
-      fallback={
-        <div className="text-center text-yellow-400 bg-black min-h-screen flex items-center justify-center">
-          Loading PRIMEXA...
-        </div>
-      }
-    >
+    <Router>
       <Routes>
-        {/* Public Login */}
+        {/* 🏁 Default Route */}
         <Route path="/" element={<LoginPage />} />
 
-        {/* Plan Selection (after Google login) */}
-        <Route path="/plan" element={<PlanPage />} />
+        {/* 💳 Plan Page — only if logged in */}
+        <Route
+          path="/plan"
+          element={user ? <PlanPage /> : <Navigate to="/" replace />}
+        />
 
-        {/* Registration page (after payment & code received) */}
-        <Route path="/register" element={<RegisterPage />} />
+        {/* ✅ Verification Page (email/OTP link) */}
+        <Route path="/verify" element={<VerifyPage />} />
 
-        {/* User Dashboard */}
-        <Route path="/dashboard" element={<Dashboard />} />
+        {/* 📊 Dashboard — only for logged in users */}
+        <Route
+          path="/dashboard"
+          element={user ? <Dashboard /> : <Navigate to="/" replace />}
+        />
 
-        {/* Admin Panel */}
-        <Route path="/admin" element={<AdminPage />} />
+        {/* 🛠️ Admin Page — only for admin/superadmin */}
+        <Route
+          path="/admin"
+          element={
+            user &&
+            (user.email === "primexa1967@gmail.com" ||
+              localStorage.getItem("primexaRole") === "admin" ||
+              localStorage.getItem("primexaRole") === "superadmin") ? (
+              <AdminPage />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
 
-        {/* Admin – Manage Plans */}
-        <Route path="/admin/plans" element={<AdminPlans />} />
-
-        {/* 404 fallback */}
+        {/* 🌐 Fallback */}
         <Route
           path="*"
           element={
-            <div className="text-center text-red-400 bg-black min-h-screen flex flex-col items-center justify-center">
-              <h1 className="text-2xl font-bold mb-2">404 — Page Not Found</h1>
-              <a
-                href="/"
-                className="text-yellow-400 underline hover:text-yellow-300"
-              >
-                Return to Login
-              </a>
+            <div className="min-h-screen bg-black flex items-center justify-center text-yellow-400 text-xl">
+              404 | Page Not Found
             </div>
           }
         />
       </Routes>
-    </Suspense>
+    </Router>
   );
 }

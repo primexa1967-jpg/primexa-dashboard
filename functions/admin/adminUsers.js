@@ -1,47 +1,99 @@
+// functions/adminUsers.js
 import { onCall } from "firebase-functions/v2/https";
-import admin from "../init.js";
+import admin from "./init.js";
 
-const db = admin.database();
+const db = admin.firestore();
+const SUPERADMIN_EMAIL = "primexa1967@gmail.com";
 
-export const adminUsers = onCall(
-  { region: "asia-south1" },
-  async (req, ctx) => {
+/**
+ * 🔹 Handles admin actions:
+ * - Approve pending user → move to activeUsers
+ * - Reject pending user → delete
+ * - Extend / expire subscriptions
+ * - Reset devices (if integrated later)
+ */
+export const adminUsers = onCall({ region: "asia-south1" }, async (req, ctx) => {
+  try {
+    const caller = ctx.auth?.token?.email;
+    if (!caller) return { ok: false, error: "UNAUTHORIZED" };
 
-    const email = ctx.auth.token.email;
+    const isSuper = caller === SUPERADMIN_EMAIL;
 
-    const isSuper = email === "primexa1967@gmail.com";
-    const isAdmin = await db
-      .ref("admins")
-      .child(email.replace(/\./g, "_"))
-      .once("value")
-      .then((s) => s.exists());
+    // Check if admin
+    const adminSnap = await db.collection("admins").doc(caller).get();
+    const isAdmin = adminSnap.exists;
 
-    if (!isAdmin && !isSuper) {
+    if (!isAdmin && !isSuper)
       return { ok: false, error: "NOT_ADMIN" };
-    }
 
-    const { action, target, data } = req.data;
-    const safeTarget = target.replace(/\./g, "_");
+    const { action, target, plan, days } = req.data;
+    if (!target) return { ok: false, error: "NO_TARGET_USER" };
 
-    if (action === "resetDevices") {
-      await db.ref(`devices/${safeTarget}`).remove();
-    }
+    const pendingRef = db.collection("pendingUsers").doc(target);
+    const activeRef = db.collection("activeUsers").doc(target);
 
-    if (action === "expireUser") {
-      await db.ref(`users/${safeTarget}`).update({ status: "expired" });
-    }
+    // 🟢 Approve pending → active
+    if (action === "approve") {
+      const snap = await pendingRef.get();
+      if (!snap.exists) return { ok: false, error: "USER_NOT_FOUND" };
 
-    if (action === "extendSubscription") {
-      const { days } = data;
-      const now = Date.now();
+      const data = snap.data();
+      const planDays =
+        plan === "plan365" ? 365 : plan === "plan180" ? 180 : 90;
 
-      await db.ref(`subscriptions/${safeTarget}`).transaction((sub) => {
-        if (!sub) return null;
-        sub.end = (sub.end || now) + days * 86400000;
-        return sub;
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + planDays);
+
+      await activeRef.set({
+        ...data,
+        plan,
+        approvedBy: caller,
+        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiryDate: expiryDate.toISOString(),
+        status: "active",
       });
+
+      await pendingRef.delete();
+      return { ok: true, status: "APPROVED" };
     }
 
-    return { ok: true };
+    // 🔴 Reject user
+    if (action === "reject") {
+      await pendingRef.delete();
+      return { ok: true, status: "REJECTED" };
+    }
+
+    // ⏳ Extend subscription
+    if (action === "extend") {
+      const snap = await activeRef.get();
+      if (!snap.exists) return { ok: false, error: "USER_NOT_FOUND" };
+
+      const data = snap.data();
+      const expiry = data.expiryDate ? new Date(data.expiryDate) : new Date();
+      expiry.setDate(expiry.getDate() + (days || 30));
+
+      await activeRef.update({
+        expiryDate: expiry.toISOString(),
+        updatedBy: caller,
+      });
+
+      return { ok: true, status: "EXTENDED" };
+    }
+
+    // ⚫ Expire user
+    if (action === "expire") {
+      await activeRef.update({ status: "expired" });
+      return { ok: true, status: "EXPIRED" };
+    }
+
+    return { ok: false, error: "INVALID_ACTION" };
+  } catch (err) {
+    console.error("❌ adminUsers error:", err);
+    return { ok: false, error: err.message };
   }
-);
+});
+
+export const fetchUsers = onCall({ region: "asia-south1" }, async (req, ctx) => {
+  const { email } = ctx.auth?.token || {};
+  if (!email) return { ok: false, error: "UNAUTHORIZED" };
+});

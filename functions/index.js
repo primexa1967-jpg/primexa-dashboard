@@ -1,39 +1,65 @@
-// ✅ Import Firebase Functions (v2 syntax)
+// functions/index.js
+// -----------------------------------------------------------------------------
+// ✅ Firebase Functions Entry Point (v2)
+// -----------------------------------------------------------------------------
+
 import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import cors from "cors";
 import admin from "firebase-admin";
 
-// ✅ Initialize Firebase Admin SDK (only once)
+// -----------------------------------------------------------------------------
+// 🔧 Initialize Firebase Admin (Safe Singleton)
+// -----------------------------------------------------------------------------
 if (!admin.apps.length) {
-  admin.initializeApp();
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    databaseURL: "https://fnodatadashboardstreamlite-default-rtdb.asia-southeast1.firebasedatabase.app"
+  });
   logger.info("✅ Firebase Admin initialized successfully");
 } else {
   logger.info("ℹ️ Firebase Admin already initialized");
 }
 
-// ✅ Import your main backend logic
-import { generateFile } from "./generateFile.js";
-
-// ✅ Setup global CORS handler
+// -----------------------------------------------------------------------------
+// 🌍 CORS Middleware Setup
+// -----------------------------------------------------------------------------
 const corsHandler = cors({ origin: true });
 
-// ✅ Health Check (region: asia-south1)
+// -----------------------------------------------------------------------------
+// 🩺 Health Check Endpoint
+// -----------------------------------------------------------------------------
 export const healthCheck = onRequest({ region: "asia-south1" }, (req, res) => {
   corsHandler(req, res, () => {
     res.status(200).json({
       status: "ok",
       region: "asia-south1",
-      message: "🔥 Firebase backend (Functions v2) is running fine in Asia!",
+      message: "🔥 Firebase backend (Functions v2) active and healthy",
+      time: new Date().toISOString()
     });
   });
 });
 
-// ✅ Export generateFile function (your main logic)
-export const generateFileAsia = onRequest(
-  { region: "asia-south1" },
-  generateFile
-);
+// -----------------------------------------------------------------------------
+// 📦 Import Backend Modules (All Function Groups)
+// -----------------------------------------------------------------------------
 
-// ✅ Add this line to include the email sender
+// ✅ Core generation / utilities
+import { generateFile } from "./generateFile.js";
+export const generateFileAsia = onRequest({ region: "asia-south1" }, generateFile);
+
+// ✅ Authentication and login
 export { sendEmailCode } from "./sendEmailCode.js";
+export { login } from "./auth/login.js";
+export { planHandler } from "./auth/plan.js";
+
+// ✅ Admin tools (for approving/rejecting users, managing plans, etc.)
+export { adminPlans } from "./admin/adminPlans.js";
+export { adminUsers } from "./admin/adminUsers.js";
+export { fetchUsers } from "./fetchUsers.js";
+
+// ✅ Option ladder (market data + DHAN API integration)
+export { fetchOptionLadder } from "./fetchOptionLadder.js";
+export { activateUser } from "./activateUser.js";
+export { approveUser } from "./approveUser.js";
+logger.info("✅ All backend functions exported successfully (asia-south1)");

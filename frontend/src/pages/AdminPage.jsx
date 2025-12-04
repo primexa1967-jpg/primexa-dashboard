@@ -1,12 +1,18 @@
+// frontend/src/pages/AdminPage.jsx
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { signOut } from "firebase/auth";
+import { auth, app } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
-/* ---------- BACKEND FUNCTION ENDPOINT ---------- */
-const BASE = "https://generatefileasia-ji3e37go5a-el.a.run.app";
+/* 🔧 Initialize Firebase Callable Functions */
+const functions = getFunctions(app, "asia-south1");
+const fetchUsersFn = httpsCallable(functions, "fetchUsers");
+const adminUsersFn = httpsCallable(functions, "adminUsers");
 
 export default function AdminPage() {
   const navigate = useNavigate();
+
   const [pendingUsers, setPendingUsers] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState("plan90");
@@ -14,80 +20,92 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [role, setRole] = useState("");
 
-  /* ---------- FETCH USERS (pending + active) ---------- */
+  /* 🟡 Fetch Users (Pending + Active) */
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const [pending, active] = await Promise.all([
-        axios.get(`${BASE}/fetchPendingUsers`),
-        axios.get(`${BASE}/fetchActiveUsers`),
+      const [pendingRes, activeRes] = await Promise.all([
+        fetchUsersFn({ type: "pending" }),
+        fetchUsersFn({ type: "active" }),
       ]);
-      setPendingUsers(pending.data || []);
-      setActiveUsers(active.data || []);
+      setPendingUsers(pendingRes.data.users || []);
+      setActiveUsers(activeRes.data.users || []);
     } catch (err) {
       console.error("Error fetching users:", err);
+      setMessage("⚠️ Unable to fetch users.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------- APPROVE USER ---------- */
+  /* 🟢 Approve User */
   const approveUser = async (user) => {
     try {
       setLoading(true);
-      const res = await axios.post(`${BASE}/generateFileAsia`, {
+      const res = await adminUsersFn({
         action: "approve",
         email: user.email,
-        name: user.name,
         uid: user.uid,
         plan: selectedPlan,
-        approvedBy: "admin",
       });
-      if (res.status === 200) {
+
+      if (res.data.ok) {
         alert(`✅ ${user.email} approved successfully!`);
         fetchUsers();
+      } else {
+        alert(`❌ Approval failed: ${res.data.error || "Unknown error"}`);
       }
     } catch (err) {
       console.error("Approval error:", err);
-      alert("❌ Error approving user.");
+      alert("❌ Approval failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------- REJECT USER ---------- */
+  /* 🔴 Reject User */
   const rejectUser = async (user) => {
     try {
       setLoading(true);
-      const res = await axios.post(`${BASE}/generateFileAsia`, {
+      const res = await adminUsersFn({
         action: "reject",
         email: user.email,
         uid: user.uid,
       });
-      if (res.status === 200) {
+
+      if (res.data.ok) {
         alert(`🚫 ${user.email} rejected.`);
         fetchUsers();
+      } else {
+        alert(`❌ Rejection failed: ${res.data.error || "Unknown error"}`);
       }
     } catch (err) {
       console.error("Rejection error:", err);
-      alert("❌ Error rejecting user.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------- NAVIGATION ---------- */
-  const goToPlans = () => navigate("/admin/plans");
+  /* 🧭 Navigation */
+  const goToPlans = () => navigate("/plan");
+  const goToDashboard = () => navigate("/dashboard");
 
-  /* ---------- LOAD DATA ON PAGE LOAD ---------- */
+  /* 🚀 Load on Page Mount */
   useEffect(() => {
     document.title = "Admin Control Panel — PRIMEXA";
-    const userRole = localStorage.getItem("primexaRole");
-    setRole(userRole || "admin");
+    const userRole = localStorage.getItem("primexaRole") || "admin";
+    setRole(userRole);
     fetchUsers();
   }, []);
 
-  /* ---------- UI ---------- */
+  /* 🔒 Logout */
+  const handleLogout = async () => {
+    await signOut(auth);
+    localStorage.clear();
+    navigate("/");
+  };
+
+  /* 🖥️ UI */
   return (
     <div className="min-h-screen bg-black text-yellow-300 p-6">
       {/* Header */}
@@ -95,9 +113,10 @@ export default function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold">Admin Control Panel</h1>
           <p className="text-sm text-yellow-400 mt-1">
-            Manage user access, approvals, and plans
+            Manage user approvals, roles, and plans
           </p>
         </div>
+
         <div className="flex gap-3 mt-4 md:mt-0">
           <button
             onClick={goToPlans}
@@ -105,14 +124,26 @@ export default function AdminPage() {
           >
             Manage Plans
           </button>
-          {role === "superadmin" && (
+
+          {(role === "superadmin" ||
+            (localStorage.getItem("primexaUser") &&
+              localStorage
+                .getItem("primexaUser")
+                .includes("primexa1967@gmail.com"))) && (
             <button
-              onClick={() => navigate("/dashboard")}
+              onClick={goToDashboard}
               className="bg-gray-700 px-4 py-2 rounded hover:bg-gray-600 transition"
             >
-              Dashboard
+              Go to Dashboard
             </button>
           )}
+
+          <button
+            onClick={handleLogout}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-500"
+          >
+            Logout
+          </button>
         </div>
       </header>
 
@@ -120,7 +151,7 @@ export default function AdminPage() {
       <section className="mb-8">
         <h2 className="text-2xl font-semibold mb-3">🕓 Pending Users</h2>
         {pendingUsers.length === 0 ? (
-          <p className="text-gray-400">No pending users found.</p>
+          <p className="text-gray-400">No pending users.</p>
         ) : (
           <table className="w-full text-sm border border-yellow-800">
             <thead className="bg-yellow-800/40 text-yellow-300">
@@ -203,7 +234,6 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* Footer */}
       {message && (
         <div className="mt-6 text-center text-yellow-400">{message}</div>
       )}
